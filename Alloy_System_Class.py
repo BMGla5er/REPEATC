@@ -143,6 +143,7 @@ class alloy_sys:
         num_phases = len(keyphases)
         if excluded[0] is not None:
             num_phases = len(keyphases) - len(excluded)
+            keyphases = list(set(keyphases)^set(excluded))
         elements = [alloy.dependent] + list(alloy.composition.keys())
         fig,axes = plt.subplots(math.ceil(num_phases/3),3,figsize=(12,3.25*math.ceil(num_phases/3)))
         k = 0
@@ -162,7 +163,7 @@ class alloy_sys:
                             cid=0
                             lines='dashed'
                         kp = keyphases[k]
-                        if any(alloy.phase_dict[kp]['frac']>threshold):
+                        if any(alloy.phase_dict[kp]['frac']>threshold)&(kp not in excluded):
                             for e in elements:
                                 if (any(alloy.phase_dict[kp][e] > 0.00001))&(kp not in excluded):
                                     axes[i][j].plot(xparams,100*alloy.phase_dict[kp][e],c=color_list[elements.index(e)],linestyle=lines)
