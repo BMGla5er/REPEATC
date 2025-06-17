@@ -1,4 +1,5 @@
 # REPEATC - Rapid Exploration of Phase Eequilibria Across Temperature and Composition
+Alternative names and taglines:
 - SARTRE -single and ready to equal
 - TC-SCOPE - ThermoCalc Single-axis Calculation Over Phase Equilibria
 - ThermALPS - Thermodynamic Alloy Landscape via Phase Simulation
