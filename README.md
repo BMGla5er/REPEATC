@@ -23,7 +23,9 @@ The architecture of this is a custom class, "alloy_sys" with the following prope
 - suspended (List of phases to be suspended from calculation, default: None)
 
 The class has four built-in functions:
-- do_perform_single_axis_split
+- do_perform_single_axis_split() which performs calculation. Additional arguments are temerpature (T, default=298) and threshold (default 0.0001) - threshold is used to prevenet clutter by exlcuding phases that are at extremely small fractions, as well as only show elements that are in phase in the composition plots.
 - phase_distribution() which plots the amount of phase at each composition
 - composition_distribution() which creates subplots for each phase and shows composition trends
 - element_distribution() which creates subplots for each element and shows which phases they are in
+
+The three plotting functions also pass the threhsold number as an argument, as well as a list of phases to be explictely excluded from the charts.
