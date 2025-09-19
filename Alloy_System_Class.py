@@ -10,7 +10,7 @@ class alloy_sys:
     """
     
     """
-    def __init__(self,dependent='Al',composition={"Si":0.1,"Mg":0.0035},param="T",param_range=range(300,1300,100),custom=False,database='TCAL9',unit='X',suspended=None):
+    def __init__(self,dependent='Al',composition={"Si":0.1,"Mg":0.0035},param="T",param_range=range(300,1300,100),custom=False,database='TCAL9',unit='X',suspended=None,default=True,included=None):
         self.dependent = dependent
         self.composition = composition
         self.param=param
@@ -19,7 +19,8 @@ class alloy_sys:
         self.custom = custom
         self.database = database
         self.suspended = suspended
-    # def calculate_phases(self,threshold):
+        self.default = default
+        self.included = included
     def add_phases(self,phaselists):
         self.phases=phaselists
     def add_nominal_compositions(self,nom_comp):
@@ -44,12 +45,28 @@ class alloy_sys:
         nom_comps = []
         if alloy.param !='T' and alloy.param not in elements:
             raise ValueError("Invalid parameter [%s] selected, Use Temperature [T] or a non-balancing element"%param+str(list(composition.keys()))) 
+        if (alloy.default == False) & (alloy.included is None):
+            raise ValueError("No phases defined - Default phases disabled but no phases selected")
         with TCPython(logging_policy=LoggingPolicy.NONE)as start:
             if alloy.custom:
-                gibbs = start.select_user_database_and_elements(alloy.database,elements).get_system();
+                if alloy.default:
+                    gibbs = start.select_user_database_and_elements(alloy.database,elements).get_system();
+                else:
+                    gibbs = (start.select_user_database_and_elements(alloy.database,elements)
+                            .without_default_phases())
+                    for ph in alloy.included:
+                        gibbs = gibbs.select_phase(ph)
+                    gibbs = gibbs.get_system()
             else:
-                gibbs = start.select_database_and_elements(alloy.database,elements).get_system();
-            eq_calculation = gibbs.with_single_equilibrium_calculation();
+                if alloy.default:
+                    gibbs = start.select_database_and_elements(alloy.database,elements).get_system();
+                else:
+                    gibbs = (start.select_database_and_elements(alloy.database,elements)
+                            .without_default_phases())
+                    for ph in alloy.included:
+                        gibbs = gibbs.select_phase(ph)
+                    gibbs = gibbs.get_system()
+            eq_calculation = gibbs.with_single_equilibrium_calculation();            
             for r in alloy.param_range:
                 temp_comp = {}
                 if alloy.param in elements:
@@ -65,7 +82,7 @@ class alloy_sys:
                 temp_comp[alloy.dependent] = 1-tot
                 if alloy.suspended is not None:
                     for phase in alloy.suspended:
-                        eq_calculation = eq_calculation.set_phase_to_suspended(phase)
+                        eq_calculation = eq_calculation.set_phase_to_suspended(phase)                    
                 calc_result = eq_calculation.calculate()
                 stable_phases = calc_result.get_stable_phases()
                 tempdict = {}
@@ -108,50 +125,80 @@ class alloy_sys:
         alloy.add_nominal_compositions(comp_trend)
         alloy.add_phase_dict(phase_dict)
         alloy.add_elem_dict(elemcomps)
-    def phase_distribution(self,save=False,img_path='PhraseDistribution.png',excluded=['None'],color_list=['black','darkgreen','darkorange','cornflowerblue',
-                                         'slategrey','magenta','lime','mediumturquoise','blue']):
+    def phase_distribution(self,save=False,img_path='PhraseDistribution.png',phase_list=[None],excluded=True,
+                           color_list=['black','red','magenta','blue','darkorange',
+                                       'darkturquoise','cyan','blueviolet']):
+        # old colorlist: color_list=['black','darkgreen','darkorange','cornflowerblue','slategrey','magenta','lime','mediumturquoise','blue']
         alloy=self
         fig,ax = plt.subplots(figsize=(6,5))
         keyphases = list(alloy.phase_dict.keys())
         k = 0
         threshold = 0.0001
         lines='solid'
-        xlab = "T (K)"
-        xparams = list(alloy.param_range)
+        # xlab = "Temperature (K)"
+        # xparams = list(alloy.param_range)
+        xlab = "Temperature (C)"
+        xparams = [i-273 for i in list(alloy.param_range)]
         if alloy.param in alloy.composition.keys():
             xlab = alloy.param + " ("+alloy.unit+". % )"
             xparams = alloy.param_range*100
-        for kp in keyphases:
-            if any(alloy.phase_dict[kp]['frac']>threshold)&(kp not in excluded):
-                if k>=len(color_list):
-                    k=0
-                    lines='dashed'
-                ax.plot(xparams,alloy.phase_dict[kp]['frac']*100,c=color_list[k],label=kp,linestyle=lines)
+        if excluded:
+            for kp in keyphases:
+                if any(alloy.phase_dict[kp]['frac']>threshold)&(kp not in phase_list):
+                    if k>=len(color_list):
+                        k=0
+                        lines='dashed'
+                    ax.plot(xparams,alloy.phase_dict[kp]['frac']*100,c=color_list[k],label=kp,linestyle=lines,linewidth=5)
+                k+=1
+        else:
+            for kp in keyphases:
+                if any(alloy.phase_dict[kp]['frac']>threshold)&(kp in phase_list):
+                    if k>=len(color_list):
+                        k=0
+                        lines='dashed'
+                    ax.plot(xparams,alloy.phase_dict[kp]['frac']*100,c=color_list[k],label=kp,linestyle=lines,linewidth=5)
                 k+=1
         ax.legend(loc='upper left',bbox_to_anchor=(1,0.85))
+        ax.set_xlim((xparams[0],xparams[-1]))
+        ax.set_ylim((1e-2,150))#10e2))
         ax.set_yscale('log')
         ax.set_xlabel(xlab,fontweight='bold');
-        ax.set_ylabel("mole %. of phase",fontweight='bold')
+        ax.set_ylabel("Amount of phase (at. %)",fontweight='bold')
         ax.set_title("Phase Distribution",fontweight='bold',fontsize=15)
         if save:
             plt.savefig(img_path,bbox_inches='tight')
         plt.show()
-    def composition_distribution(self,save=False,img_path='CompositionDistribution.png',threshold=0.00001,excluded=[None],color_list=['black','darkgreen','darkorange','cornflowerblue',
-                                         'slategrey','magenta','lime','mediumturquoise','blue']):
+    def composition_distribution(self,save=False,img_path='CompositionDistribution.png',threshold=0.00001,phase_list=[None],excluded=True,
+                                 color_list=['black','red','magenta','blue','darkorange',
+                                       'darkturquoise','cyan','blueviolet']):
+        # old colorlist: color_list=['black','darkgreen','darkorange','cornflowerblue','slategrey','magenta','lime','mediumturquoise','blue']
         alloy=self
         keyphases = list(alloy.phase_dict.keys())
         num_phases = len(keyphases)
-        if excluded[0] is not None:
-            num_phases = len(keyphases) - len(excluded)
-            keyphases = list(set(keyphases)^set(excluded))
+        if excluded:
+            if phase_list[0] is not None:
+                num_phases = len(keyphases) - len(phase_list)
+                keyphases = list(set(keyphases)^set(phase_list))
+        else:
+            keyphases = phase_list
+            num_phases = len(phase_list)
         elements = [alloy.dependent] + list(alloy.composition.keys())
         fig,axes = plt.subplots(math.ceil(num_phases/3),3,figsize=(12,3.25*math.ceil(num_phases/3)))
         k = 0
+        col = 0
+        # xlab = "Temperature (K)"
+        # xparams = list(alloy.param_range)
+        xlab = "Temperature (C)"
+        xparams = [i-273 for i in list(alloy.param_range)]
+        elem_fonts = {}
         cid = 0
         lines='solid'
-        col = 0
-        xlab = "T (K)"
-        xparams = list(alloy.param_range)
+        for i in range(len(elements)):
+            if cid >= len(color_list):
+                cid = 0
+                lines = 'dashed'
+            elem_fonts[elements[i]] = [color_list[cid],lines]
+            cid+=1
         if alloy.param in alloy.composition.keys():
             xlab = alloy.param + " ("+alloy.unit+". % )"
             xparams = alloy.param_range*100
@@ -159,18 +206,20 @@ class alloy_sys:
             for i in range(math.ceil(num_phases/3)):
                 for j in range(3):
                     if k<num_phases:
-                        if k>=len(elements):
-                            cid=0
-                            lines='dashed'
+                        # if k>=len(elements):
+                        #     cid=0
+                        #     lines='dashed'
                         kp = keyphases[k]
-                        if any(alloy.phase_dict[kp]['frac']>threshold)&(kp not in excluded):
+                        if any(alloy.phase_dict[kp]['frac']>threshold):#&(kp not in excluded):
                             for e in elements:
-                                if (any(alloy.phase_dict[kp][e] > 0.00001))&(kp not in excluded):
-                                    axes[i][j].plot(xparams,100*alloy.phase_dict[kp][e],c=color_list[elements.index(e)],linestyle=lines)
+                                if (any(alloy.phase_dict[kp][e] > 0.00001)):#&(kp not in excluded):
+                                    # axes[i][j].plot(xparams,100*alloy.phase_dict[kp][e],c=color_list[elements.index(e)],linestyle=lines)
+                                    axes[i][j].plot(xparams,100*alloy.phase_dict[kp][e],c=elem_fonts[e][0],linestyle=elem_fonts[e][1],linewidth=5)
                         axes[i][j].set_title(kp,fontweight='bold',fontsize=15)
                         axes[i][j].set_yscale('log')
                         # axes[i][j].locator_params(axis='y', numticks=8)
-                        axes[i][j].set_ylim((1e-2,10e2))
+                        axes[i][j].set_xlim((xparams[0],xparams[-1]))
+                        axes[i][j].set_ylim((1e-2,150))#10e2))
                         # axes[i][j].set_yticks([1e-4,1e-3,1e-2,1e-1,1e0,1e1,1e2][1e-5,1e-4,1e-3,1e-2,1e-1,1e0,1e1,1e2])
                         k+=1
                         cid+=1
@@ -194,13 +243,14 @@ class alloy_sys:
                     kp = keyphases[k]
                     if any(alloy.phase_dict[kp]['frac']>threshold):
                         for e in elements:
-                            if any(alloy.phase_dict[kp][e] > 0.00001)&(kp not in excluded):
-                                axes[i].plot(xparams,100*alloy.phase_dict[kp][e],c=color_list[elements.index(e)],linestyle=lines)
+                            if any(alloy.phase_dict[kp][e] > 0.00001)&(kp not in phase_list):
+                                axes[i].plot(xparams,100*alloy.phase_dict[kp][e],c=color_list[elements.index(e)],linestyle=lines,linewidth=5)
                     axes[i].set_title(kp,fontweight='bold',fontsize=15)
                     axes[i].set_yscale('log')
                     axes[i].set_xlabel(xlab,fontweight='bold')
                     # axes[i][j].locator_params(axis='y', numticks=8)
-                    axes[i].set_ylim((1e-2,5e2))
+                    axes[i].set_xlim((xparams[0],xparams[-1]))
+                    axes[i].set_ylim((1e-2,150))#5e2))
                     # axes[i][j].set_yticks([1e-4,1e-3,1e-2,1e-1,1e0,1e1,1e2][1e-5,1e-4,1e-3,1e-2,1e-1,1e0,1e1,1e2])
                     k+=1
                     cid+=1
@@ -214,20 +264,29 @@ class alloy_sys:
         if save:
             plt.savefig(img_path,bbox_inches='tight')
         plt.show()
-    def element_distribution(self,save=False,img_path='ElementDistribution.png',threshold=0.00001,excluded=[None],color_list=['black','darkgreen','darkorange','cornflowerblue',
-                                             'slategrey','magenta','lime','mediumturquoise','blue']):
+    def element_distribution(self,save=False,img_path='ElementDistribution.png',threshold=0.00001,phase_list=[None],excluded=True,
+                             color_list=['black','red','magenta','blue','darkorange',
+                                       'darkturquoise','cyan','blueviolet']):
+        # old colorlist: color_list=['black','darkgreen','darkorange','cornflowerblue','slategrey','magenta','lime','mediumturquoise','blue']
         alloy=self
         keyphases = list(alloy.phase_dict.keys())
         num_phases = len(keyphases)
-        if excluded[0] is not None:
-            num_phases = len(keyphases) - len(excluded)
+        if excluded:
+            if phase_list[0] is not None:
+                num_phases = len(keyphases) - len(phase_list)
+                keyphases = list(set(keyphases)^set(phase_list))
+        else:
+            keyphases = phase_list
+            num_phases = len(keyphases)
         elements = [alloy.dependent] + list(alloy.composition.keys())
         num_elems = len(elements)
         k = 0
         col = 0
         lines=[Line2D([0],[0],color=color_list[list(keyphases).index(k)]) for k in keyphases]
-        xlab = "T (K)"
-        xparams = list(alloy.param_range)
+        # xlab = "Temperature (K)"
+        # xparams = list(alloy.param_range)
+        xlab = "Temperature (C)"
+        xparams = [i-273 for i in list(alloy.param_range)]
         if alloy.param in alloy.composition.keys():
             xlab = alloy.param + " ("+alloy.unit+". % )"
             xparams = alloy.param_range*100
@@ -239,11 +298,12 @@ class alloy_sys:
                     if k<num_elems:
                         e = elements[k]
                         for kp in keyphases:
-                            if (any(alloy.elem_dict[e][kp]>threshold))&(kp not in excluded):
-                                axes[i][j].plot(xparams,100*alloy.elem_dict[e][kp],c=color_list[list(keyphases).index(kp)])
+                            if (any(alloy.elem_dict[e][kp]>threshold)):#&(kp not in excluded):
+                                axes[i][j].plot(xparams,100*alloy.elem_dict[e][kp],c=color_list[list(keyphases).index(kp)],linewidth=5)
                         axes[i][j].set_title(e,fontweight='bold',fontsize=15)
                         axes[i][j].set_yscale('log')
-                        axes[i][j].set_ylim((1e-2,10e2))
+                        axes[i][j].set_xlim((xparams[0],xparams[-1]))
+                        axes[i][j].set_ylim((1e-2,150))#10e2))
                         k+=1
                         if j == 0:
                             axes[i][j].set_ylabel("Amount in phase (%)",fontweight='bold')
@@ -261,11 +321,12 @@ class alloy_sys:
                 if k<num_elems:
                     e = elements[k]
                     for kp in keyphases:
-                        if any(alloy.elem_dict[e][kp]>threshold)&(kp not in excluded):
-                            axes[i].plot(xparams,100*alloy.elem_dict[e][kp],c=color_list[list(keyphases).index(kp)])
+                        if any(alloy.elem_dict[e][kp]>threshold):#&(kp not in excluded):
+                            axes[i].plot(xparams,100*alloy.elem_dict[e][kp],c=color_list[list(keyphases).index(kp)],linewidth=5)
                     axes[i].set_title(e,fontweight='bold',fontsize=15)
                     axes[i].set_yscale('log')
-                    axes[i].set_ylim((1e-2,5e2))
+                    axes[i].set_xlim((xparams[0],xparams[-1]))
+                    axes[i].set_ylim((1e-2,150))#5e2))
                     axes[i].set_xlabel(xlab,fontweight='bold')
                     k+=1
                 else:
