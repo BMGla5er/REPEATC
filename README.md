@@ -1,16 +1,7 @@
 # REPEATC - Rapid Exploration of Phase Equilibria Across Temperature and Composition
-Alternative names and taglines:
-- SARTRE -single and ready to equal
-- TC-SCOPE - ThermoCalc Single-axis Calculation Over Phase Equilibria
-- ThermALPS - Thermodynamic Alloy Landscape via Phase Simulation
-- ThermoPACT - Phase Analysis by Composition and Temperature
-- REPEATC - Rapid Exploration of Phase Equilibria Across Temperature and Compositions
-- "Mapping Phase Evolution one Axis at a time"
-Generic single axis equilibrium evaluator using ThermoCalc's TC-Python package.
+When exploring a new alloy system, a valuable exploration is to evaluate phase development and transformation at a known set of conditions. In the Taheri-Mousavi laboratory, this has been the "first step" of any new project, from diule Al-alloys to multi-principle element alloys (MPEAs), where we evaluate phases and distribution versus temperature, introduction of new elements, and changes to composition (such as along the range of compositions).
 
-When exploring a new alloy system, valuable exploration is phase development and transformation as a known set of conditions changes. When developing alloys for high-temperature, validating that strengthening phases are stable beyond the service temperature is a must. In our group, this has been the "first step" of any new metal, from diule Al-alloys to multi-principle element alloys (MPEAs), where we evaluate phases and distribution versus temperature, introduction of new elements, and changes to composition (such as along the ranqge of compositions).
-
-This code is intended to accelerate these explorations by offering ag eneral script which, using a local ThermoCalc and TC-Python installation, will take an alloy, database, and set of input conditions (currently configured to be temepratures, "T", or fraction of a non-balancing element), then perform single equilibrium calculatiuons at each condition and automatically generate plots for phase fraction, composition of each phsae, and distribution of each element in phases.
+This code is intended to accelerate these explorations by offering a general script which, using a local ThermoCalc and TC-Python installation, will take an alloy, database, and set of input conditions (currently configured to be temepratures, "T", or fraction of a non-balancing element), then perform single equilibrium calculatiuons at each condition and automatically generate plots for phase fraction, composition of each phsae, and distribution of each element in phases.
 
 The architecture of this is a custom class, "alloy_sys" with the following properties selections:
 - dependent (balancing element, default: 'Al')
